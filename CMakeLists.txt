@@ -1,0 +1,8 @@
+cmake_minimum_required(VERSION 3.16)
+project(cloud_reg)
+find_package(PCL 1.3 REQUIRED COMPONENTS common io)
+
+include_directories(${PCL_INCLUDE_DIRS})
+add_definitions(${PCL_DEFINITIONS})
+add_executable(pc_0 pc_0.cpp)
+target_link_libraries(pc_0 ${PCL_LIBRARIES})
