@@ -61,7 +61,7 @@ int main (int argc, char** argv)
     filter.setLeafSize(5,5,5);
     filter.filter(*downsampled);
 
-    std::cout << "Downsample to " << downsampled->width*downsampled->height << "points" << std::endl;
+    std::cout << "Downsampled to " << downsampled->width*downsampled->height << "points" << std::endl;
 
 
 
