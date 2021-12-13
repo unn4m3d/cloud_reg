@@ -78,7 +78,7 @@ CloudReg::PCPtr CloudReg::loadFile(const std::filesystem::path& path)
         throw std::runtime_error(std::string("Unknown file extension: ") + ext);
     }
     
-    std::cout << timer.toc() << "s" << std::endl;
+    std::cout << timer.toc() << " ms" << std::endl;
 
     return cloud;
 }
@@ -122,7 +122,7 @@ void CloudReg::downsample(const CloudReg::PCPtr& input, CloudReg::PCPtr& output,
     filter.filter(*output);
 
     auto cnt = output->width*output->height;
-    std::cout << cnt << "points, " << timer.toc() << "s" << std::endl;
+    std::cout << cnt << " pts, " << timer.toc() << " ms" << std::endl;
 }
 
 void CloudReg::estimateNormals(const PCPtr& input, PCNormalPtr& output)
@@ -135,7 +135,7 @@ void CloudReg::estimateNormals(const PCPtr& input, PCNormalPtr& output)
     normal_estimator.setInputCloud (input);
     normal_estimator.setKSearch (50);
     normal_estimator.compute (*output);
-    std::cout << timer.toc() << "s" << std::endl;
+    std::cout << timer.toc() << " ms" << std::endl;
 }
 
 CloudReg::PCColPtr CloudReg::regionGrowing(const PCPtr& input, const PCNormalPtr& normals, std::vector<pcl::PointIndices>& clusters)
@@ -157,7 +157,7 @@ CloudReg::PCColPtr CloudReg::regionGrowing(const PCPtr& input, const PCNormalPtr
 
     reg.extract(clusters);
 
-    std::cout << timer.toc() << "s" << std::endl;
+    std::cout << timer.toc() << " ms" << std::endl;
     return reg.getColoredCloud();
 }
 
