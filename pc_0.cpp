@@ -10,6 +10,13 @@
 #include "poly_gen.hpp"
 #include <Eigen/Core>
 
+#include <pcl/search/search.h>
+#include <pcl/search/kdtree.h>
+#include <pcl/features/normal_3d.h>
+#include <pcl/visualization/cloud_viewer.h>
+#include <pcl/filters/passthrough.h>
+#include <pcl/segmentation/region_growing.h>
+
 using namespace std::chrono_literals;
 
 std::vector<size_t> selection;
@@ -182,7 +189,7 @@ int main (int argc, char** argv)
 
     pcl::visualization::PCLVisualizer::Ptr viewer (new pcl::visualization::PCLVisualizer ("3D Viewer"));
     viewer->setBackgroundColor (0, 0, 0);
-    viewer->addPointCloud<pcl::PointXYZ> (downsampled, "sample cloud");
+    //viewer->addPointCloud<pcl::PointXYZ> (downsampled, "sample cloud");
     viewer->setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 1, "sample cloud");
     viewer->addCoordinateSystem (1.0);
     viewer->initCameraParameters ();
@@ -216,11 +223,42 @@ int main (int argc, char** argv)
 
     viewer->addText("Select first point", 0, 0, "prompt");
 
+    std::cout << "Using RegionGrowing..." << std::endl;
+
+    pcl::search::Search<pcl::PointXYZ>::Ptr tree (new pcl::search::KdTree<pcl::PointXYZ>);
+    pcl::PointCloud <pcl::Normal>::Ptr normals (new pcl::PointCloud <pcl::Normal>);
+    pcl::NormalEstimation<pcl::PointXYZ, pcl::Normal> normal_estimator;
+    normal_estimator.setSearchMethod (tree);
+    normal_estimator.setInputCloud (downsampled);
+    normal_estimator.setKSearch (50);
+    normal_estimator.compute (*normals);
+    std::cout << "Calculated normals" << std::endl;
+    pcl::RegionGrowing<pcl::PointXYZ, pcl::Normal> reg;
+    reg.setMinClusterSize (50);
+    reg.setMaxClusterSize (1000000);
+    reg.setSearchMethod (tree);
+    reg.setNumberOfNeighbours (30);
+    reg.setInputCloud (downsampled);
+    //reg.setIndices (indices);
+    reg.setInputNormals (normals);
+    reg.setSmoothnessThreshold (3.0 / 180.0 * M_PI);
+    reg.setCurvatureThreshold (1.0);
+
+    std::vector <pcl::PointIndices> clusters;
+    reg.extract (clusters);
+
+    pcl::PointCloud <pcl::PointXYZRGB>::Ptr colored_cloud = reg.getColoredCloud ();
+
+    std::cout << "Segmentation done" << std::endl;
+    viewer->addPointCloud(colored_cloud, "colored");
+    viewer->setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 1, "colored");
+
+
      while (!viewer->wasStopped ())
-        {
-            viewer->spinOnce (100);
-            std::this_thread::sleep_for(100ms);
-        }
+    {
+        viewer->spinOnce (100);
+        std::this_thread::sleep_for(100ms);
+    }
 
     return (0);
 }
