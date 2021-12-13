@@ -10,6 +10,12 @@
 #include <pcl/filters/voxel_grid.h>
 #include <pcl/common/transforms.h>
 #include <thread>
+#include <pcl/sample_consensus/method_types.h>
+#include <pcl/sample_consensus/model_types.h>
+#include <pcl/filters/passthrough.h>
+#include <pcl/filters/project_inliers.h>
+#include <pcl/segmentation/sac_segmentation.h>
+#include <pcl/surface/concave_hull.h>
 
 using namespace clouds;
 
@@ -186,6 +192,57 @@ std::vector<Eigen::Vector3f> CloudReg::centersOfMass(const PCPtr& cloud, const s
     return centers;
 }
 
+std::vector<pcl::ConvexHull<pcl::PointXYZ>> CloudReg::calculateHulls(const PCPtr& cloud, std::vector<pcl::PointIndices>& clusters)
+{
+    std::vector<pcl::ConvexHull<pcl::PointXYZ>> vec;
+    vec.reserve(clusters.size());
+
+    std::cout << "Calculating convex hulls... ";
+    std::cout.flush(); 
+    timer.tic(); 
+
+
+    for(size_t i = 0; i < clusters.size(); ++i)
+    {
+        pcl::ModelCoefficients::Ptr coefficients (new pcl::ModelCoefficients);
+        pcl::PointIndices::Ptr 
+            inliers (new pcl::PointIndices), 
+            indices(&clusters[i], [](pcl::PointIndices*){});
+        // Create the segmentation object
+        pcl::SACSegmentation<pcl::PointXYZ> seg;
+        // Optional
+        seg.setOptimizeCoefficients (true);
+        // Mandatory
+        seg.setModelType (pcl::SACMODEL_PLANE);
+        seg.setMethodType (pcl::SAC_RANSAC);
+        seg.setDistanceThreshold (0.01);
+        seg.setIndices(indices);
+        seg.setInputCloud (cloud);
+        seg.segment (*inliers, *coefficients);
+
+        PCPtr cloud_projected(new pcl::PointCloud<pcl::PointXYZ>);
+
+        pcl::ProjectInliers<pcl::PointXYZ> proj;
+        proj.setModelType (pcl::SACMODEL_PLANE);
+        //proj.setIndices (*inliers);
+        proj.setInputCloud (cloud);
+        proj.setModelCoefficients (coefficients);
+        proj.filter (*cloud_projected);
+
+
+        pcl::ConvexHull<pcl::PointXYZ> chull;
+        chull.setInputCloud (cloud_projected);
+        //chull.setAlpha (0.1);
+        
+        vec.push_back(chull);
+    }
+
+    std::cout << timer.toc() << " ms" << std::endl;
+
+    return vec;
+}
+
+
 CloudReg::CloudReg() :
     cloud(new pcl::PointCloud<pcl::PointXYZ>),
     downsampled(new pcl::PointCloud<pcl::PointXYZ>),
@@ -222,7 +279,20 @@ void CloudReg::run(int argc, char** argv)
         
         viewer->addSphere(pcl::PointXYZ(c.x(), c.y(), c.z()),10, 0, 0, 255, std::string("sphere") + std::to_string(center_idx++));
     }
-    
+
+    auto hulls = calculateHulls(downsampled, clusters);
+
+    std::cout << "Finding largest hull by area... ";
+    std::cout.flush();
+    timer.tic();
+    auto largest = std::max_element(hulls.begin(), hulls.end(), [](auto& a, auto& b){ return a.getTotalArea() < b.getTotalArea();});
+
+    std::cout << std::distance(largest, hulls.begin()) << "th one, " << timer.toc() << " ms" << std::endl;
+
+    auto& lc = centers[std::distance(largest, hulls.begin())];
+
+    viewer->addSphere(pcl::PointXYZ(lc.x(), lc.y(), lc.z()), 25, 255, 0, 0, "sphere_select");
+
     while(!viewer->wasStopped())
     {
         yield();

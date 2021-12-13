@@ -7,6 +7,7 @@
 #include "InputManager.hpp"
 #include <pcl/search/search.h>
 #include <pcl/search/kdtree.h>
+#include <pcl/surface/concave_hull.h>
 
 namespace clouds
 {
@@ -32,6 +33,7 @@ namespace clouds
         void estimateNormals(const PCPtr& input, PCNormalPtr& output);
         PCColPtr regionGrowing(const PCPtr& input, const PCNormalPtr& normals, std::vector<pcl::PointIndices>&);
         std::vector<Eigen::Vector3f> centersOfMass(const PCPtr&, const std::vector<pcl::PointIndices>&);
+        std::vector<pcl::ConvexHull<pcl::PointXYZ>> calculateHulls(const PCPtr&, std::vector<pcl::PointIndices>&);
 
         void yield();
     private:
