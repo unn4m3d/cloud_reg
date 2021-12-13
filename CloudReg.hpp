@@ -31,6 +31,7 @@ namespace clouds
         void downsample(const PCPtr& input, PCPtr& output, float leaf_size);
         void estimateNormals(const PCPtr& input, PCNormalPtr& output);
         PCColPtr regionGrowing(const PCPtr& input, const PCNormalPtr& normals, std::vector<pcl::PointIndices>&);
+        std::vector<Eigen::Vector3f> centersOfMass(const PCPtr&, const std::vector<pcl::PointIndices>&);
 
         void yield();
     private:

@@ -78,7 +78,7 @@ CloudReg::PCPtr CloudReg::loadFile(const std::filesystem::path& path)
         throw std::runtime_error(std::string("Unknown file extension: ") + ext);
     }
     
-    std::cout << timer.toc() << " ms" << std::endl;
+    std::cout << cloud->size() << " pts, " << timer.toc() << " ms" << std::endl;
 
     return cloud;
 }
@@ -111,7 +111,7 @@ void CloudReg::addCloud(const CloudReg::PCPtr& c, const CloudReg::PCColHandler& 
 
 void CloudReg::downsample(const CloudReg::PCPtr& input, CloudReg::PCPtr& output, float leaf_size)
 {
-    std::cout << "Downsampling with leaf_size = " << leaf_size << "...";
+    std::cout << "Downsampling with leaf_size = " << leaf_size << "... ";
     std::cout.flush();
     timer.tic();
 
@@ -161,6 +161,31 @@ CloudReg::PCColPtr CloudReg::regionGrowing(const PCPtr& input, const PCNormalPtr
     return reg.getColoredCloud();
 }
 
+std::vector<Eigen::Vector3f> CloudReg::centersOfMass(const PCPtr& cloud, const std::vector<pcl::PointIndices>& indices)
+{
+    std::cout << "Computing centers of mass for " << indices.size() << "segments... ";
+    std::cout.flush();
+    timer.tic();
+    std::vector<Eigen::Vector3f> centers;
+    centers.reserve(indices.size());
+
+    for(auto& pt_indices : indices)
+    {
+        auto& ind = pt_indices.indices;
+        float weight = 1.0f/ind.size();
+        centers.push_back(Eigen::Vector3f(0,0,0));
+        auto& vec = centers.back();
+        for(auto& idx : ind)
+        {
+            auto& pt = cloud->at(idx);
+            vec += Eigen::Vector3f(pt.x, pt.y, pt.z) * weight;
+        }
+    }
+
+    std::cout << timer.toc() << " ms" << std::endl;
+    return centers;
+}
+
 CloudReg::CloudReg() :
     cloud(new pcl::PointCloud<pcl::PointXYZ>),
     downsampled(new pcl::PointCloud<pcl::PointXYZ>),
@@ -188,6 +213,15 @@ void CloudReg::run(int argc, char** argv)
 
     openViewer();
     addCloud(colored_cloud, "segmented");
+
+    auto centers = centersOfMass(downsampled, clusters);
+
+    auto center_idx = 0;
+    for(auto& c : centers)
+    {
+        
+        viewer->addSphere(pcl::PointXYZ(c.x(), c.y(), c.z()),10, 0, 0, 255, std::string("sphere") + std::to_string(center_idx++));
+    }
     
     while(!viewer->wasStopped())
     {
