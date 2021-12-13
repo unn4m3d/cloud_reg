@@ -3,9 +3,12 @@
 #include <pcl/point_types.h>
 #include <pcl/visualization/cloud_viewer.h>
 #include <pcl/filters/voxel_grid.h>
+#include <pcl/common/transforms.h>
 #include <thread>
 #include <filesystem>
 #include "ply_loader.hpp"
+#include "poly_gen.hpp"
+#include <Eigen/Core>
 
 using namespace std::chrono_literals;
 
@@ -62,6 +65,7 @@ inline size_t selectNearestPoint(pcl::visualization::PCLVisualizer::Ptr viewer, 
 
 pcl::PointCloud<pcl::PointXYZ>::Ptr cloud (new pcl::PointCloud<pcl::PointXYZ>);
 pcl::PointCloud<pcl::PointXYZ>::Ptr downsampled(new pcl::PointCloud<pcl::PointXYZ>);
+pcl::PointCloud<pcl::PointXYZ>::Ptr transformed_cloud (new pcl::PointCloud<pcl::PointXYZ>);
 
 void mouseEventOccurred (const pcl::visualization::MouseEvent &event, void* viewer_void) 
 {
@@ -77,36 +81,41 @@ void mouseEventOccurred (const pcl::visualization::MouseEvent &event, void* view
                 selection.push_back(selectNearestPoint(viewer, event.getX(), event.getY()));
                 viewer->updateText("Select next point", 0, 0, "prompt");
                 std::cout << "Selected point with index " << selection.back() << std::endl;
+
             }
 
             if(selection.size() == 3)
             {
-                pcl::PointXYZ 
-                    p0 = downsampled->at(selection[0]),
-                    p1 = downsampled->at(selection[1]),
-                    p2 = downsampled->at(selection[2]);
+                auto bb = clouds::computeAlignedBox(downsampled);
+                auto normal = clouds::computeCoeffs({downsampled->at(selection[0]), downsampled->at(selection[1]), downsampled->at(selection[2])});
+                auto plane = clouds::generatePlane(normal, bb);
 
-                selection.clear();
+                viewer->addModelFromPolyData(plane, "plane");
 
-                float 
-                    x0 = p0.x, x1 = p1.x, x2 = p2.x,
-                    y0 = p0.y, y1 = p1.y, y2 = p2.y,
-                    z0 = p0.z, z1 = p1.z, z2 = p2.z;
+                auto normal_vec = Eigen::Vector3f(normal.x(), normal.y(), normal.z());
+                auto up_vec = Eigen::Vector3f(0,0,1);
+                
+                auto quat = Eigen::Quaternionf::FromTwoVectors(normal_vec, up_vec);
+                auto pt0 = downsampled->at(selection[0]);
+                
+                Eigen::Matrix4f translation = Eigen::Matrix4f::Identity();
+                translation (0,3) = -pt0.x;
+                translation (1,3) = -pt0.y;
+                translation (2,3) = -pt0.z;
 
-                float
-                    xc = (y1 - y0) * (z2 - z0) - (z1 - z0) * (y2 - y0),
-                    yc = (z1 - z0) * (x2 - x0) - (x1 - x0) * (z2 - z0),
-                    zc = (x1 - x0) * (y2 - y0) - (y1 - y0) * (x2 - x0);
+                Eigen::Matrix4f rotation = Eigen::Matrix4f::Identity();
+                auto rmat = quat.matrix();
+                rotation (0,0) = rmat (0,0); rotation (0,1) = rmat (0,1); rotation (0,2) = rmat (0,2);
+                rotation (1,0) = rmat (1,0); rotation (1,1) = rmat (1,1); rotation (1,2) = rmat (1,2);
+                rotation (2,0) = rmat (2,0); rotation (2,1) = rmat (2,1); rotation (2,2) = rmat (2,2);
+                rotation (3,3) = 1;
+                
+                pcl::transformPointCloud(*downsampled, *transformed_cloud, rotation*translation);
+                pcl::visualization::PointCloudColorHandlerCustom<pcl::PointXYZ> single_color(cloud, 0, 255, 0);
+                viewer->addPointCloud(transformed_cloud, single_color, "transformed");
 
-                float a = xc, b = yc, c = zc, d = -x0*xc - y0*yc - z0*zc;
 
-                pcl::ModelCoefficients mc;
-                mc.values.push_back(a); 
-                mc.values.push_back(b);
-                mc.values.push_back(c);
-                mc.values.push_back(d);
-                viewer->addPlane(mc, "plane");
-                     
+
             }
         }
     }
