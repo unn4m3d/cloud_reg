@@ -16,6 +16,7 @@
 #include <pcl/filters/project_inliers.h>
 #include <pcl/segmentation/sac_segmentation.h>
 #include <pcl/surface/concave_hull.h>
+#include <pcl/filters/extract_indices.h>
 
 using namespace clouds;
 
@@ -249,6 +250,21 @@ CloudReg::CloudReg() :
     search_tree(new pcl::search::KdTree<pcl::PointXYZ>)
     {}
 
+static pcl::ModelCoefficients approxPlane(const CloudReg::PCPtr& cloud, pcl::PointIndices& indices)
+{
+    pcl::ModelCoefficients coeffs;
+    pcl::SACSegmentation<pcl::PointXYZ> seg;
+    pcl::PointIndices::Ptr inliers (new pcl::PointIndices), ind(&indices, [](auto*){});
+    seg.setOptimizeCoefficients (true);
+    seg.setModelType (pcl::SACMODEL_PLANE);
+    seg.setMethodType (pcl::SAC_RANSAC);
+    seg.setDistanceThreshold (0.01);
+    seg.setIndices(ind);
+    seg.setInputCloud (cloud);
+    seg.segment (*inliers, coeffs);
+    return coeffs;
+}
+
 void CloudReg::run(int argc, char** argv)
 {
     std::filesystem::path input("test_pcd.pcd");
@@ -286,12 +302,34 @@ void CloudReg::run(int argc, char** argv)
     std::cout.flush();
     timer.tic();
     auto largest = std::max_element(hulls.begin(), hulls.end(), [](auto& a, auto& b){ return a.getTotalArea() < b.getTotalArea();});
+    auto index = std::distance(largest, hulls.begin());
 
-    std::cout << std::distance(largest, hulls.begin()) << "th one, " << timer.toc() << " ms" << std::endl;
+    std::cout << index << "th one, " << timer.toc() << " ms" << std::endl;
 
-    auto& lc = centers[std::distance(largest, hulls.begin())];
+    auto& lc = centers[index];
+    auto& cluster = clusters[index];
 
     viewer->addSphere(pcl::PointXYZ(lc.x(), lc.y(), lc.z()), 25, 255, 0, 0, "sphere_select");
+
+    auto plane = approxPlane(downsampled, cluster);
+
+    float size = 250;
+
+    auto top_plane = plane;
+    top_plane.values.back() += size;
+
+    for(size_t i = 0; i < centers.size(); ++i)
+    {
+        if(i != index)
+        {
+            if((centers[i]-centers[index]).norm() <= size)
+            {
+                //selection_indices.push_back(i);
+                viewer->addSphere(pcl::PointXYZ(centers[i].x(), centers[i].y(), centers[i].z()), 25, 0, 255, 0, std::string("sphere_select") + std::to_string(i));
+            }
+        }
+    }
+
 
     while(!viewer->wasStopped())
     {
