@@ -39,7 +39,7 @@ namespace clouds
     private:
         InputManager input;
         PCVisPtr viewer;
-        PCPtr cloud, downsampled;
+        PCPtr cloud, downsampled, transformed;
         pcl::console::TicToc timer;
         pcl::search::Search<pcl::PointXYZ>::Ptr search_tree;
     };

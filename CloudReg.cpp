@@ -247,6 +247,7 @@ std::vector<pcl::ConvexHull<pcl::PointXYZ>> CloudReg::calculateHulls(const PCPtr
 CloudReg::CloudReg() :
     cloud(new pcl::PointCloud<pcl::PointXYZ>),
     downsampled(new pcl::PointCloud<pcl::PointXYZ>),
+    transformed(new pcl::PointCloud<pcl::PointXYZ>),
     search_tree(new pcl::search::KdTree<pcl::PointXYZ>)
     {}
 
@@ -263,6 +264,23 @@ static pcl::ModelCoefficients approxPlane(const CloudReg::PCPtr& cloud, pcl::Poi
     seg.setInputCloud (cloud);
     seg.segment (*inliers, coeffs);
     return coeffs;
+}
+
+static inline Eigen::Matrix4f createTransform(const Eigen::Vector3f& coord, const Eigen::Quaternionf& rot)
+{
+    Eigen::Matrix4f translation = Eigen::Matrix4f::Identity();
+    translation (0,3) = -coord.x();
+    translation (1,3) = -coord.y();
+    translation (2,3) = -coord.z();
+
+    Eigen::Matrix4f rotation = Eigen::Matrix4f::Identity();
+    auto rmat = rot.matrix();
+    rotation (0,0) = rmat (0,0); rotation (0,1) = rmat (0,1); rotation (0,2) = rmat (0,2);
+    rotation (1,0) = rmat (1,0); rotation (1,1) = rmat (1,1); rotation (1,2) = rmat (1,2);
+    rotation (2,0) = rmat (2,0); rotation (2,1) = rmat (2,1); rotation (2,2) = rmat (2,2);
+    rotation (3,3) = 1;
+
+    return rotation*translation;
 }
 
 void CloudReg::run(int argc, char** argv)
@@ -314,9 +332,15 @@ void CloudReg::run(int argc, char** argv)
     auto plane = approxPlane(downsampled, cluster);
 
     float size = 250;
+    std::vector<pcl::PointIndices> selection_indices;
+    pcl::ExtractIndices<pcl::PointXYZ> extract;
+    extract.setInputCloud(downsampled);
+    extract.setNegative(false);
+    PCPtr extracted_segment(new pcl::PointCloud<pcl::PointXYZ>), trans_ext_segment(new pcl::PointCloud<pcl::PointXYZ>);
 
-    auto top_plane = plane;
-    top_plane.values.back() += size;
+    Eigen::Vector3f plane_normal(plane.values[0], plane.values[1], plane.values[2]), up(0, 0, 1);
+    Eigen::Quaternionf rotation = Eigen::Quaternionf::FromTwoVectors(plane_normal, up);
+    auto transform = createTransform(lc, rotation);
 
     for(size_t i = 0; i < centers.size(); ++i)
     {
@@ -324,12 +348,19 @@ void CloudReg::run(int argc, char** argv)
         {
             if((centers[i]-centers[index]).norm() <= size)
             {
-                //selection_indices.push_back(i);
+                selection_indices.push_back(clusters[i]);
                 viewer->addSphere(pcl::PointXYZ(centers[i].x(), centers[i].y(), centers[i].z()), 25, 0, 255, 0, std::string("sphere_select") + std::to_string(i));
+                pcl::PointIndices::Ptr iptr(&clusters[i], [](auto*){});
+                extract.setIndices(iptr);
+                extract.filter(*extracted_segment);
+                pcl::transformPointCloud(*extracted_segment, *trans_ext_segment, transform);
+                *transformed += *trans_ext_segment;
             }
         }
     }
 
+    pcl::visualization::PointCloudColorHandlerCustom<pcl::PointXYZ> green(transformed, 0, 255, 0);
+    addCloud(transformed, green, "transformed_cloud");
 
     while(!viewer->wasStopped())
     {
