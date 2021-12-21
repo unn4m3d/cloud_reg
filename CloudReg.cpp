@@ -20,6 +20,7 @@
 #include <pcl/registration/icp.h>
 #include "stl_reader.hpp"
 #include "poly_gen.hpp"
+#include "point_sampler.hpp"
 
 using namespace clouds;
 
@@ -271,34 +272,10 @@ static pcl::ModelCoefficients approxPlane(const CloudReg::PCPtr& cloud, pcl::Poi
 
 static inline auto getCloudFromSTL(const std::filesystem::path& path, size_t number)
 {
-    pcl::PointCloud<pcl::PointXYZLNormal>::Ptr stl_cloud(new pcl::PointCloud<pcl::PointXYZLNormal>);
 
     stl_reader::StlMesh <float, unsigned int> mesh(path.string());
 
-    auto ntris = mesh.num_tris();
-
-    stl_cloud->resize(number);
-
-    for(size_t i = 0; i < ntris; ++i)
-    {
-
-        const float* norm = mesh.tri_normal(i);
-        const float 
-            *p1 = mesh.tri_corner_coords(i, 0),
-            *p2 = mesh.tri_corner_coords(i, 1),
-            *p3 = mesh.tri_corner_coords(i, 2);
-
-        std::vector<pcl::PointXYZ> ps(3);
-        ps[0].x = p1[0]; ps[0].y = p1[1]; ps[0].z = p1[2];
-        ps[1].x = p2[0]; ps[1].y = p2[1]; ps[1].z = p2[2];
-        ps[2].x = p3[0]; ps[2].y = p3[1]; ps[2].z = p3[2];
-
-        auto cld = clouds::generatePts(ps, Eigen::Vector3f(norm), number);
-
-        *stl_cloud += *cld;
-    }    
-
-    return stl_cloud;
+    return clouds::sampleMesh(mesh, number);
 }
 
 static inline Eigen::Matrix4f createTransform(const Eigen::Vector3f& coord, const Eigen::Quaternionf& rot)
