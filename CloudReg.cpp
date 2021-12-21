@@ -18,6 +18,7 @@
 #include <pcl/surface/concave_hull.h>
 #include <pcl/filters/extract_indices.h>
 #include <pcl/registration/icp.h>
+#include <pcl/registration/icp_nl.h>
 #include "stl_reader.hpp"
 #include "poly_gen.hpp"
 #include "point_sampler.hpp"
@@ -270,7 +271,7 @@ static pcl::ModelCoefficients approxPlane(const CloudReg::PCPtr& cloud, pcl::Poi
     return coeffs;
 }
 
-static inline auto getCloudFromSTL(const std::filesystem::path& path, size_t number)
+static inline auto getCloudFromSTL(const std::filesystem::path& path, float number)
 {
 
     stl_reader::StlMesh <float, unsigned int> mesh(path.string());
@@ -374,11 +375,14 @@ void CloudReg::run(int argc, char** argv)
     pcl::visualization::PointCloudColorHandlerCustom<pcl::PointXYZ> green(transformed, 0, 255, 0);
     addCloud(transformed, green, "transformed_cloud");
 
-    std::cout << "Loading pts from STL..." << std::endl;
+    std::cout << "Loading pts from STL...";
+    std::cout.flush();
+    timer.tic();
 
-    auto stl_cloud = getCloudFromSTL("test/test.stl", 50);
+    auto stl_cloud = getCloudFromSTL("test/test.stl", 0.2);
     //auto stl_cloud = loadFile("test/model.pcd");
 
+    std::cout << " " << stl_cloud->width*stl_cloud->height << " pts, " << timer.toc() << " ms" << std::endl;
     std::cout << "Drawing original STL cloud..." << std::endl; 
     pcl::visualization::PointCloudColorHandlerCustom<decltype(stl_cloud)::element_type::PointType> yellow(stl_cloud, 255, 255, 0);
     viewer->addPointCloud(stl_cloud, yellow, "stl");
@@ -389,14 +393,10 @@ void CloudReg::run(int argc, char** argv)
     estimateNormals(transformed, tr_normals);
     pcl::concatenateFields(*transformed, *tr_normals, *tr_normal_cloud);
 
-    pcl::IterativeClosestPoint<pcl::PointXYZLNormal, pcl::PointXYZLNormal> icp;
+    pcl::IterativeClosestPointNonLinear<pcl::PointXYZLNormal, pcl::PointXYZLNormal> icp;
 
     icp.setInputSource(stl_cloud);
     icp.setInputTarget(tr_normal_cloud);
-    icp.setUseReciprocalCorrespondences(false);
-    icp.setRANSACIterations(100);
-    icp.setMaximumIterations(2500);
-
     std::cout << "Trying ICP " << std::endl;
 
     pcl::PointCloud<pcl::PointXYZLNormal>::Ptr aligned(new pcl::PointCloud<pcl::PointXYZLNormal>);
