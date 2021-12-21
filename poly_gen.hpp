@@ -12,4 +12,6 @@ namespace clouds
     extern vtkSmartPointer<vtkPolyData> generatePlane(const Eigen::Vector4f& normal, const Eigen::AlignedBox<float, 3>& bounding_box);
 
     extern Eigen::Vector4f computeCoeffs(const std::vector<pcl::PointXYZ>& three_pts);
+
+    extern pcl::PointCloud<pcl::PointXYZLNormal>::Ptr generatePts(const std::vector<pcl::PointXYZ>& three_pts, const Eigen::Vector3f& normal, size_t num);
 }
