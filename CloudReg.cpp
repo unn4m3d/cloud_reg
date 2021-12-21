@@ -384,6 +384,31 @@ void CloudReg::run(int argc, char** argv)
     viewer->addPointCloud(stl_cloud, yellow, "stl");
     viewer->setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 1, "stl");
 
+    pcl::PointCloud<pcl::Normal>::Ptr tr_normals(new pcl::PointCloud<pcl::Normal>);
+    pcl::PointCloud<pcl::PointXYZLNormal>::Ptr tr_normal_cloud(new pcl::PointCloud<pcl::PointXYZLNormal>);
+    estimateNormals(transformed, tr_normals);
+    pcl::concatenateFields(*transformed, *tr_normals, *tr_normal_cloud);
+
+    pcl::IterativeClosestPoint<pcl::PointXYZLNormal, pcl::PointXYZLNormal> icp;
+
+    icp.setInputSource(stl_cloud);
+    icp.setInputTarget(tr_normal_cloud);
+    icp.setUseReciprocalCorrespondences(false);
+    icp.setRANSACIterations(100);
+    icp.setMaximumIterations(2500);
+
+    std::cout << "Trying ICP " << std::endl;
+
+    pcl::PointCloud<pcl::PointXYZLNormal>::Ptr aligned(new pcl::PointCloud<pcl::PointXYZLNormal>);
+    icp.align(*aligned);
+
+    pcl::visualization::PointCloudColorHandlerCustom<decltype(aligned)::element_type::PointType> red(aligned, 255, 0, 0);
+    viewer->addPointCloud(aligned, red, "aligned");
+
+    std::cout << "ICP has converged: " << icp.hasConverged() << " score: " <<
+    icp.getFitnessScore() << std::endl;
+    std::cout << icp.getFinalTransformation() << std::endl;
+
     while(!viewer->wasStopped())
     {
         yield();

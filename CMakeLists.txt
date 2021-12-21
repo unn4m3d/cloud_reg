@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.16)
 project(cloud_reg)
 
-find_package(PCL 1.3 REQUIRED COMPONENTS common io visualization filters segmentation surface)
+find_package(PCL 1.3 REQUIRED COMPONENTS common io visualization filters segmentation surface registration)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED TRUE)
