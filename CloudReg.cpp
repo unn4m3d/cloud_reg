@@ -375,12 +375,17 @@ void CloudReg::run(int argc, char** argv)
     pcl::visualization::PointCloudColorHandlerCustom<pcl::PointXYZ> green(transformed, 0, 255, 0);
     addCloud(transformed, green, "transformed_cloud");
 
+    std::cout << "Saving transformed cloud..." << std::endl;
+
+    pcl::io::savePCDFile("test/extracted.pcd", *transformed);
+
     std::cout << "Loading pts from STL...";
     std::cout.flush();
     timer.tic();
 
     auto stl_cloud = getCloudFromSTL("test/test.stl", 0.2);
     //auto stl_cloud = loadFile("test/model.pcd");
+    pcl::io::savePCDFile("test/model.pcd", *stl_cloud);
 
     std::cout << " " << stl_cloud->width*stl_cloud->height << " pts, " << timer.toc() << " ms" << std::endl;
     std::cout << "Drawing original STL cloud..." << std::endl; 
@@ -395,8 +400,8 @@ void CloudReg::run(int argc, char** argv)
 
     pcl::IterativeClosestPointNonLinear<pcl::PointXYZLNormal, pcl::PointXYZLNormal> icp;
 
-    icp.setInputSource(stl_cloud);
-    icp.setInputTarget(tr_normal_cloud);
+    icp.setInputSource(tr_normal_cloud);
+    icp.setInputTarget(stl_cloud);
     std::cout << "Trying ICP " << std::endl;
 
     pcl::PointCloud<pcl::PointXYZLNormal>::Ptr aligned(new pcl::PointCloud<pcl::PointXYZLNormal>);

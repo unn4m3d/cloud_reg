@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.16)
 project(cloud_reg)
 
-find_package(PCL 1.3 REQUIRED COMPONENTS common io visualization filters segmentation surface registration)
+find_package(PCL 1.11 REQUIRED COMPONENTS common io visualization filters segmentation surface registration)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED TRUE)
@@ -12,5 +12,11 @@ add_definitions(${PCL_DEFINITIONS})
 add_executable(pc_0 pc_0.cpp ply_loader.cpp poly_gen.cpp)
 target_link_libraries(pc_0 ${PCL_LIBRARIES})
 
-add_executable(pc_1 pc_1.cpp InputHandler.cpp InputManager.cpp CloudReg.cpp poly_gen.cpp point_sampler.cpp)
+add_executable(pc_1 pc_1.cpp CloudReg.cpp poly_gen.cpp point_sampler.cpp)
 target_link_libraries(pc_1 ${PCL_LIBRARIES})
+
+add_executable(pc_2 pc_2/try_icp.cpp poly_gen.cpp point_sampler.cpp)
+target_link_libraries(pc_2 ${PCL_LIBRARIES})
+
+add_executable(pc_2_hulls pc_2/try_icp_hulls.cpp)
+target_link_libraries(pc_2_hulls ${PCL_LIBRARIES})

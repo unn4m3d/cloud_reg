@@ -4,7 +4,6 @@
 #include <pcl/console/time.h>
 #include <pcl/point_cloud.h>
 #include <pcl/visualization/cloud_viewer.h>
-#include "InputManager.hpp"
 #include <pcl/search/search.h>
 #include <pcl/search/kdtree.h>
 #include <pcl/surface/concave_hull.h>
@@ -37,7 +36,6 @@ namespace clouds
 
         void yield();
     private:
-        InputManager input;
         PCVisPtr viewer;
         PCPtr cloud, downsampled, transformed;
         pcl::console::TicToc timer;

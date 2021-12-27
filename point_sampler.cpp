@@ -74,7 +74,7 @@ namespace clouds
 
             for(double r1 = 0.0; r1 < 1.0; r1 += rstep)
             {
-                for(double r2 = 0.0; r2 < 1 - r1; r2 += rstep)
+                for(double r2 = 0.0; r2 < 1.0; r2 += rstep)
                 {
                     auto pos = sampleTrianglePoint(pt1, pt2, pt3, r1, r2);
                     pcl::PointXYZLNormal pt;
