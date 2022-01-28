@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 3.16)
 project(cloud_reg)
 
 find_package(PCL 1.11 REQUIRED COMPONENTS common io visualization filters segmentation surface registration)
+find_package(teaserpp REQUIRED)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED TRUE)
@@ -20,3 +21,6 @@ target_link_libraries(pc_2 ${PCL_LIBRARIES})
 
 add_executable(pc_2_hulls pc_2/try_icp_hulls.cpp)
 target_link_libraries(pc_2_hulls ${PCL_LIBRARIES})
+
+add_executable(pc_2_teaser pc_2/try_teaser.cpp)
+target_link_libraries(pc_2_teaser ${PCL_LIBRARIES} teaserpp::teaser_registration teaserpp::teaser_io teaserpp::teaser_features)

@@ -306,6 +306,8 @@ void CloudReg::run(int argc, char** argv)
 
     this->cloud = loadFile(input);
 
+    pcl::io::savePCDFile("test/scene.pcd", *cloud);
+
     downsample(this->cloud, this->downsampled, 5);
 
     CloudReg::PCNormalPtr normals(new pcl::PointCloud<pcl::Normal>);
@@ -319,7 +321,6 @@ void CloudReg::run(int argc, char** argv)
     addCloud(colored_cloud, "segmented");
 
     auto centers = centersOfMass(downsampled, clusters);
-
     auto center_idx = 0;
     for(auto& c : centers)
     {

@@ -30,8 +30,8 @@ int main()
   
   // Load object and scene
   pcl::console::print_highlight ("Loading point clouds...\n");
-  if (pcl::io::loadPCDFile<PointNT> ("test/extracted.pcd", *object) < 0 ||
-      pcl::io::loadPCDFile<PointNT> ("test/model.pcd", *scene) < 0)
+  if (pcl::io::loadPCDFile<PointNT> ("test/model.pcd", *object) < 0 ||
+      pcl::io::loadPCDFile<PointNT> ("test/scene.pcd", *scene) < 0)
   {
     pcl::console::print_error ("Error loading object/scene file!\n");
     return (1);
@@ -40,7 +40,7 @@ int main()
   // Downsample
   pcl::console::print_highlight ("Downsampling...\n");
   pcl::VoxelGrid<PointNT> grid;
-  const float leaf = 5;
+  const float leaf = 4;
   grid.setLeafSize (leaf, leaf, leaf);
   grid.setInputCloud (object);
   grid.filter (*object);
@@ -57,7 +57,7 @@ int main()
   // Estimate features
   pcl::console::print_highlight ("Estimating features...\n");
   FeatureEstimationT fest;
-  fest.setRadiusSearch (2.5f);
+  fest.setRadiusSearch (10.0f);
   fest.setInputCloud (object);
   fest.setInputNormals (object);
   fest.compute (*object_features);
@@ -72,12 +72,12 @@ int main()
   align.setSourceFeatures (object_features);
   align.setInputTarget (scene);
   align.setTargetFeatures (scene_features);
-  align.setMaximumIterations (50000); // Number of RANSAC iterations
-  align.setNumberOfSamples (3); // Number of points to sample for generating/prerejecting a pose
-  align.setCorrespondenceRandomness (5); // Number of nearest features to use
-  align.setSimilarityThreshold (0.9f); // Polygonal edge length similarity threshold
+ align.setMaximumIterations (200000); // Number of RANSAC iterations
+  align.setNumberOfSamples (5); // Number of points to sample for generating/prerejecting a pose
+  align.setCorrespondenceRandomness (3); // Number of nearest features to use
+  align.setSimilarityThreshold (0.5f); // Polygonal edge length similarity threshold
   align.setMaxCorrespondenceDistance (2.5f * leaf); // Inlier threshold
-  align.setInlierFraction (0.25f); // Required inlier fraction for accepting a pose hypothesis
+  align.setInlierFraction (0.2f); // Required inlier fraction for accepting a pose hypothesis
   {
     pcl::ScopeTime t("Alignment");
     align.align (*object_aligned);
