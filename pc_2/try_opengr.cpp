@@ -159,9 +159,6 @@ main (int argc, char **argv)
   PointCloudT::Ptr object_backup(new PointCloudT);
   PointCloudT::Ptr scene (new PointCloudT);
 
-  FeatureCloudT::Ptr object_features (new FeatureCloudT);
-  FeatureCloudT::Ptr scene_features (new FeatureCloudT);
-
   // Get input object and scene
   if (argc < 3)
   {
@@ -180,52 +177,37 @@ main (int argc, char **argv)
     return (-1);
   }
 
-  pcl::transformPointCloud(*object, *object, randomRotationMatrix().matrix());
-  pcl::copyPointCloud(*object, *object_backup);
+  /*if(int c = Demo::getArgs(argc, argv) != 0)
+    {
+      Demo::printUsage(argc, argv);
+      exit(std::max(c,0));
+    
+    }*/
+    
+     pcl::Super4PCS<PointNT,PointNT> align;
+  auto &options = align.getOptions();
+  bool overlapOk = options.configureOverlap(overlap);
+    if(! overlapOk )  {
+        //logger.Log<Utils::ErrorReport>("Invalid overlap configuration. ABORT");
+        return false;
+    }
+    options.sample_size = 400;
+    options.max_normal_difference = 5;
+    options.max_color_distance = max_color;
+    options.max_time_seconds = 500;
+    options.delta = delta;
 
-   pcl::console::print_highlight ("Downsampling...\n");
-  pcl::VoxelGrid<PointNT> grid;
-  const float leaf = 4.0f;
-  grid.setLeafSize (leaf, leaf, leaf);
-  grid.setInputCloud (object);
-  grid.filter (*object);
-  grid.setInputCloud (scene);
-  grid.filter (*scene);
-  
-  // Estimate normals for scene
-  pcl::console::print_highlight ("Estimating scene normals...\n");
-  pcl::NormalEstimationOMP<PointNT,PointNT> nest;
-  nest.setRadiusSearch (0.01);
-  nest.setInputCloud (scene);
-  nest.compute (*scene);
-  
-  // Estimate features
-  pcl::console::print_highlight ("Estimating features...\n");
-  FeatureEstimationT fest;
-  fest.setRadiusSearch (0.025);
-  fest.setInputCloud (object);
-  fest.setInputNormals (object);
-  fest.compute (*object_features);
-  fest.setInputCloud (scene);
-  fest.setInputNormals (scene);
-  fest.compute (*scene_features);
-  
   // Perform alignment
   pcl::console::print_highlight ("Starting alignment...\n");
-  pcl::SampleConsensusPrerejective<PointNT,PointNT,FeatureT> align;
-  align.setInputSource (object);
-  align.setSourceFeatures (object_features);
-  align.setInputTarget (scene);
-  align.setTargetFeatures (scene_features);
-  align.setMaximumIterations (250000); // Number of RANSAC iterations
-  align.setNumberOfSamples (3); // Number of points to sample for generating/prerejecting a pose
-  align.setCorrespondenceRandomness (5); // Number of nearest features to use
-  align.setSimilarityThreshold (0.4f); // Polygonal edge length similarity threshold
-  align.setMaxCorrespondenceDistance (2.5f * leaf); // Inlier threshold
-  align.setInlierFraction (0.2f); // Required inlier fraction for accepting a pose hypothesis
+  pcl::transformPointCloud(*object, *object, randomRotationMatrix().matrix());
+  align.setInputSource(object);
+  align.setInputTarget(scene);
+
+  pcl::copyPointCloud(*object, *object_backup);
+
   {
-    pcl::ScopeTime t("Alignment");
-    align.align (*object_aligned);
+      pcl::ScopeTime t("Alignment");
+      align.align(*object_aligned);
   }
 
   if (align.hasConverged ())

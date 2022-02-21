@@ -15,64 +15,90 @@
 #include <teaser/matcher.h>
 #include <teaser/registration.h>
 #include <teaser/fpfh.h>
+#include <pcl/io/ply_io.h>
+#include <pcl/io/obj_io.h>
+
 
 
 using PointT = pcl::PointXYZ;
 typedef pcl::PointNormal PointNT;
-typedef pcl::PointCloud<PointT> PointCloudT;
+typedef pcl::PointCloud<PointNT> PointCloudT;
 typedef pcl::PointCloud<pcl::Normal> NormalCloudT;
 typedef pcl::FPFHSignature33 FeatureT;
-typedef pcl::FPFHEstimationOMP<PointT,pcl::Normal,FeatureT> FeatureEstimationT;
+typedef pcl::FPFHEstimationOMP<PointNT, PointNT, FeatureT> FeatureEstimationT;
 typedef pcl::PointCloud<FeatureT> FeatureCloudT;
-typedef pcl::visualization::PointCloudColorHandlerCustom<PointT> ColorHandlerT;
+typedef pcl::visualization::PointCloudColorHandlerCustom<PointNT> ColorHandlerT;
 
-int main()
+using loadfunc = std::function<int(const std::string &, pcl::PointCloud<PointNT> &)>;
+const std::map<std::string, loadfunc> loaders =
+{
+    { "obj", pcl::io::loadOBJFile<PointNT> },
+    { "ply", pcl::io::loadPLYFile<PointNT> },
+    { "pcd", pcl::io::loadPCDFile<PointNT> }
+};
+
+
+// src: https://en.cppreference.com/w/cpp/string/byte/tolower
+std::string str_tolower(std::string s) {
+    std::transform(s.begin(), s.end(), s.begin(),
+                   [](unsigned char c){ return std::tolower(c); } // correct
+                  );
+    return s;
+}
+
+bool
+load(const std::string& filename, PointCloudT::Ptr& pcloud){
+    auto getFileExt = [] (const std::string& s) -> std::string {
+
+       size_t i = s.rfind('.', s.length());
+       return i != std::string::npos
+                 ? str_tolower( s.substr(i+1, s.length() - i) )
+                 : "";
+    };
+
+    std::string ext = getFileExt(filename);
+    auto l = loaders.find(ext);
+    if( l != loaders.end() ) {
+        return (*l).second( filename, *pcloud ) >= 0;
+    }
+    pcl::console::print_error ("Unsupported file extension: %s\n", ext.c_str());
+    return false;
+}
+
+
+int main(int argc, char** argv)
 {
   PointCloudT::Ptr object (new PointCloudT);
   PointCloudT::Ptr scene (new PointCloudT);
-  PointCloudT::Ptr object_d (new PointCloudT);
-  PointCloudT::Ptr scene_d (new PointCloudT);
   PointCloudT::Ptr object_aligned(new PointCloudT);
-  NormalCloudT::Ptr o_n(new NormalCloudT), s_n(new NormalCloudT);
   FeatureCloudT::Ptr o_f(new FeatureCloudT), s_f(new FeatureCloudT);
   
   // Load object and scene
+  if (argc < 3)
+  {
+    pcl::console::print_error ("Syntax is: %s scene.obj object.obj [PARAMS]\n", argv[0]);
+    return (-1);
+  }
+
+  std::string objPath {argv[2]};
+  std::string scenePath {argv[1]};
+
+  // Load object and scene
   pcl::console::print_highlight ("Loading point clouds...\n");
-  if (pcl::io::loadPCDFile<pcl::PointXYZ> ("../test/model.pcd", *object) < 0 ||
-      pcl::io::loadPCDFile<pcl::PointXYZ> ("../test/scene.pcd", *scene) < 0)
+  if ( ! ( load(objPath, object) && load(scenePath, scene) ) )
   {
     pcl::console::print_error ("Error loading object/scene file!\n");
-    return (1);
+    return (-1);
   }
-  
-  // Downsample
-  pcl::console::print_highlight ("Downsampling...\n");
-  pcl::VoxelGrid<PointT> grid;
-  const float leaf = 10;
-  grid.setLeafSize (leaf, leaf, leaf);
-  grid.setInputCloud (object);
-  grid.filter (*object_d);
-  grid.setInputCloud (scene);
-  grid.filter (*scene_d);
-
-  // Estimate normals for scene
-  pcl::console::print_highlight ("Estimating normals...\n");
-  pcl::NormalEstimationOMP<PointT,pcl::Normal> nest;
-  nest.setRadiusSearch (10);
-  nest.setInputCloud (scene_d);
-  nest.compute (*s_n);
-  nest.setInputCloud (object_d);
-  nest.compute (*o_n);
-  
   // Estimate features
   pcl::console::print_highlight ("Estimating features...\n");
   FeatureEstimationT fest;
-  fest.setRadiusSearch (10.0f);
-  fest.setInputCloud (object_d);
-  fest.setInputNormals (o_n);
+  fest.setRadiusSearch (90.0f);
+  fest.setInputCloud (object);
+  fest.setInputNormals (object);
   fest.compute (*o_f);
-  fest.setInputCloud (scene_d);
-  fest.setInputNormals (s_n);
+  fest.setInputCloud (scene);
+  fest.setInputNormals (scene);
   fest.compute (*s_f);
 
 
@@ -81,12 +107,12 @@ int main()
   {
       pcl::ScopeTime t("Conversion");
 
-      for(auto& p : object_d->points)
+      for(auto& p : object->points)
       {
           teaser_object.push_back({p.x, p.y, p.z});
       }
 
-      for(auto& p : scene_d->points)
+      for(auto& p : scene->points)
       {
           teaser_scene.push_back({p.x, p.y, p.z});
       }
@@ -99,14 +125,14 @@ int main()
       teaser_object, teaser_scene, *o_f, *s_f, false, true, false, 0.95);
 
   teaser::RobustRegistrationSolver::Params params;
-  params.noise_bound = 0.05;
+  params.noise_bound = 0.01;
   params.cbar2 = 1;
   params.estimate_scaling = false;
-  params.rotation_max_iterations = 100;
-  params.rotation_gnc_factor = 1.4;
+  params.rotation_max_iterations = 1000000;
+  params.rotation_gnc_factor = 1.1;
   params.rotation_estimation_algorithm =
-      teaser::RobustRegistrationSolver::ROTATION_ESTIMATION_ALGORITHM::GNC_TLS;
-  params.rotation_cost_threshold = 0.005;
+      teaser::RobustRegistrationSolver::ROTATION_ESTIMATION_ALGORITHM::FGR;
+  params.rotation_cost_threshold = 0.001;
 
   teaser::RobustRegistrationSolver solver(params);
 
@@ -135,11 +161,11 @@ int main()
         transformation.rotation *
         Eigen::Scaling(transformation.scale);
 
-    pcl::transformPointCloud(*object_d, *object_aligned, affine.matrix());
+    pcl::transformPointCloud(*object, *object_aligned, affine.matrix());
 
     // Show alignment
     pcl::visualization::PCLVisualizer visu("Alignment");
-    visu.addPointCloud (scene_d, ColorHandlerT (scene, 0.0, 255.0, 0.0), "scene");
+    visu.addPointCloud (scene, ColorHandlerT (scene, 0.0, 255.0, 0.0), "scene");
     visu.addPointCloud (object_aligned, ColorHandlerT (object_aligned, 0.0, 0.0, 255.0), "object_aligned");
     visu.spin ();
   
