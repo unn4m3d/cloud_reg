@@ -49,3 +49,12 @@ target_link_libraries(compare ${PCL_LIBRARIES} gr::algo teaserpp::teaser_registr
 
 add_executable(gencorr pc_2/gencorr.cpp)
 target_link_libraries(gencorr ${PCL_LIBRARIES})
+
+add_executable(pc_2_rt pc_2/test_robustness.cpp)
+target_link_libraries(pc_2_rt ${PCL_LIBRARIES} gr::algo)
+
+add_executable(pc_3 pc_3.cpp)
+target_link_libraries(pc_3 ${PCL_LIBRARIES})
+
+add_executable(pc_3_1 pc_3_1.cpp)
+target_link_libraries(pc_3_1 ${PCL_LIBRARIES})

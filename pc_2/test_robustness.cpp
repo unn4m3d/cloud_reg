@@ -12,7 +12,6 @@
 #include <pcl/registration/sample_consensus_prerejective.h>
 #include <pcl/features/normal_3d_omp.h>
 #include <pcl/features/fpfh_omp.h>
-#include <pcl/registration/icp_nl.h>
 
 #include <string>
 #include <functional> // std::function
@@ -155,6 +154,7 @@ inline Affine3d randomRotationMatrix(double angle)
     return Affine3d(Eigen::AngleAxisd(angle, randomUnitVector()));
 }
 
+
 // Align a rigid object to a scene with clutter and occlusions
 int
 main (int argc, char **argv)
@@ -164,9 +164,6 @@ main (int argc, char **argv)
   PointCloudT::Ptr object_aligned (new PointCloudT);
   PointCloudT::Ptr object_backup(new PointCloudT);
   PointCloudT::Ptr scene (new PointCloudT);
-
-  FeatureCloudT::Ptr object_features (new FeatureCloudT);
-  FeatureCloudT::Ptr scene_features (new FeatureCloudT);
 
   // Get input object and scene
   if (argc < 3)
@@ -186,22 +183,44 @@ main (int argc, char **argv)
     return (-1);
   }
 
-  //pcl::transformPointCloud(*object, *object, randomRotationMatrix().matrix());
-  //pcl::copyPointCloud(*object, *object_backup);
+  double angle = M_PI;
 
-  if(argc > 3)
-    pcl::transformPointCloud(*object, *object, randomRotationMatrix(std::stod(argv[3]) * M_PI/180).matrix());
-  else
-    pcl::transformPointCloud(*object, *object, randomRotationMatrix().matrix());
+  if(argc >= 4)
+  {
+      angle = std::stod(argv[3]) * M_PI / 180.0;
+  }
 
-  pcl::IterativeClosestPoint<PointNT, PointNT> align;
+  /*if(int c = Demo::getArgs(argc, argv) != 0)
+    {
+      Demo::printUsage(argc, argv);
+      exit(std::max(c,0));
+    
+    }*/
+    
+     pcl::Super4PCS<PointNT,PointNT> align;
+  auto &options = align.getOptions();
+  bool overlapOk = options.configureOverlap(overlap);
+    if(! overlapOk )  {
+        //logger.Log<Utils::ErrorReport>("Invalid overlap configuration. ABORT");
+        return false;
+    }
+    options.sample_size = 400;
+    options.max_normal_difference = 5;
+    options.max_color_distance = max_color;
+    options.max_time_seconds = 500;
+    options.delta = delta;
+
+  // Perform alignment
+  pcl::console::print_highlight ("Starting alignment...\n");
+  pcl::transformPointCloud(*object, *object, randomRotationMatrix(angle).matrix());
   align.setInputSource(object);
   align.setInputTarget(scene);
-  align.setMaximumIterations(10000);
-   
+
+  pcl::copyPointCloud(*object, *object_backup);
+
   {
-    pcl::ScopeTime t("Alignment");
-    align.align (*object_aligned);
+      pcl::ScopeTime t("Alignment");
+      align.align(*object_aligned);
   }
 
   if (align.hasConverged ())

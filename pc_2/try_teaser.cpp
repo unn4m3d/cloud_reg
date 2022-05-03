@@ -66,6 +66,30 @@ load(const std::string& filename, PointCloudT::Ptr& pcloud){
 }
 
 
+using Eigen::Affine3d;
+
+
+#include <random>
+
+static std::random_device rd;
+static std::mt19937_64 gen(rd());
+static std::uniform_real_distribution<double> dis(-M_PI, M_PI);
+
+inline Eigen::Vector3d randomUnitVector()
+{
+    return Eigen::Vector3d(dis(gen), dis(gen), dis(gen)).normalized();
+}
+
+inline Affine3d randomRotationMatrix()
+{
+    return Affine3d(Eigen::AngleAxisd(dis(gen), randomUnitVector()));
+}
+
+inline Affine3d randomRotationMatrix(double angle)
+{
+    return Affine3d(Eigen::AngleAxisd(angle, randomUnitVector()));
+}
+
 int main(int argc, char** argv)
 {
   PointCloudT::Ptr object (new PointCloudT);
@@ -90,6 +114,15 @@ int main(int argc, char** argv)
     pcl::console::print_error ("Error loading object/scene file!\n");
     return (-1);
   }
+
+  if(argc > 3)
+    pcl::transformPointCloud(*object, *object, randomRotationMatrix(std::stod(argv[3]) * M_PI/180).matrix());
+
+  pcl::VoxelGrid<PointNT> grid;
+  grid.setLeafSize(4, 4, 4);
+  grid.setInputCloud(scene);
+  grid.filter(*scene);
+
   // Estimate features
   pcl::console::print_highlight ("Estimating features...\n");
   FeatureEstimationT fest;

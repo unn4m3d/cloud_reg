@@ -149,6 +149,11 @@ inline Affine3d randomRotationMatrix()
     return Affine3d(Eigen::AngleAxisd(dis(gen), randomUnitVector()));
 }
 
+inline Affine3d randomRotationMatrix(double angle)
+{
+    return Affine3d(Eigen::AngleAxisd(angle, randomUnitVector()));
+}
+
 // Align a rigid object to a scene with clutter and occlusions
 int
 main (int argc, char **argv)
@@ -180,7 +185,10 @@ main (int argc, char **argv)
     return (-1);
   }
 
-  pcl::transformPointCloud(*object, *object, randomRotationMatrix().matrix());
+  if(argc > 3)
+    pcl::transformPointCloud(*object, *object, randomRotationMatrix(std::stod(argv[3]) * M_PI/180).matrix());
+  else
+    pcl::transformPointCloud(*object, *object, randomRotationMatrix().matrix());
   pcl::copyPointCloud(*object, *object_backup);
 
    pcl::console::print_highlight ("Downsampling...\n");

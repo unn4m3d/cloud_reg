@@ -5,6 +5,7 @@
 #include <pcl/console/print.h>
 #include <pcl/features/fpfh_omp.h>
 #include <pcl/filters/voxel_grid.h>
+#include <pcl/filters/crop_box.h>
 #include <pcl/io/obj_io.h>
 #include <pcl/io/ply_io.h>
 #include <pcl/io/pcd_io.h>
@@ -13,6 +14,7 @@
 #include <pcl/features/normal_3d_omp.h>
 #include <pcl/features/fpfh_omp.h>
 #include <pcl/registration/icp_nl.h>
+#include <vtkRenderWindow.h>
 
 #include <string>
 #include <functional> // std::function
@@ -22,6 +24,7 @@
 
 #include <gr/utils/shared.h>
 #include <unistd.h>
+#include "matconv.hpp"
 
 
 static std::string input1 = "input1.obj";
@@ -117,66 +120,28 @@ load(const std::string& filename, PointCloudT::Ptr& pcloud){
 }
 
 
-using PtIndex = size_t;
-using PtSet = std::vector<PtIndex>;
-using Correspondence = std::pair<PtSet, PtSet>;
-using CorrSet = std::vector<Correspondence>;
-
-struct CorrData
-{
-    CorrSet set;
-    Correspondence all_pts;
-};
-typedef pcl::FPFHSignature33 FeatureT;
-typedef pcl::FPFHEstimationOMP<PointNT,PointNT,FeatureT> FeatureEstimationT;
-typedef pcl::PointCloud<FeatureT> FeatureCloudT;
-typedef pcl::visualization::PointCloudColorHandlerCustom<PointNT> ColorHandlerT;
-using Eigen::Affine3d;
-
-
-
-
-static std::random_device rd;
-static std::mt19937_64 gen(rd());
-static std::uniform_real_distribution<double> dis(-M_PI, M_PI);
-
-inline Eigen::Vector3d randomUnitVector()
-{
-    return Eigen::Vector3d(dis(gen), dis(gen), dis(gen)).normalized();
-}
-
-inline Affine3d randomRotationMatrix()
-{
-    return Affine3d(Eigen::AngleAxisd(dis(gen), randomUnitVector()));
-}
-
-inline Affine3d randomRotationMatrix(double angle)
-{
-    return Affine3d(Eigen::AngleAxisd(angle, randomUnitVector()));
-}
-
 // Align a rigid object to a scene with clutter and occlusions
 int
 main (int argc, char **argv)
 {
   // Point clouds
   PointCloudT::Ptr object (new PointCloudT);
-  PointCloudT::Ptr object_aligned (new PointCloudT);
-  PointCloudT::Ptr object_backup(new PointCloudT);
   PointCloudT::Ptr scene (new PointCloudT);
-
-  FeatureCloudT::Ptr object_features (new FeatureCloudT);
-  FeatureCloudT::Ptr scene_features (new FeatureCloudT);
+  PointCloudT::Ptr object_b (new PointCloudT);
+  PointCloudT::Ptr scene_b (new PointCloudT);
+  PointCloudT::Ptr object_a (new PointCloudT);
 
   // Get input object and scene
-  if (argc < 3)
+  if (argc < 4)
   {
-    pcl::console::print_error ("Syntax is: %s scene.obj object.obj [PARAMS]\n", argv[0]);
+    pcl::console::print_error ("Syntax is: %s scene.obj object.obj tr1 tr2\n", argv[0]);
     return (-1);
   }
 
   std::string objPath {argv[2]};
   std::string scenePath {argv[1]};
+  std::string trPath { argv[3] };
+  std::string cropPath {argv[4] };
 
   // Load object and scene
   pcl::console::print_highlight ("Loading point clouds...\n");
@@ -186,56 +151,76 @@ main (int argc, char **argv)
     return (-1);
   }
 
-  //pcl::transformPointCloud(*object, *object, randomRotationMatrix().matrix());
-  //pcl::copyPointCloud(*object, *object_backup);
+  std::ifstream tr(trPath), crop(cropPath);
+  auto mat = clouds::parse_matrix<4,4,float>(tr);
+  auto mat2 = clouds::parse_matrix<4,4,float>(crop);
 
-  if(argc > 3)
-    pcl::transformPointCloud(*object, *object, randomRotationMatrix(std::stod(argv[3]) * M_PI/180).matrix());
-  else
-    pcl::transformPointCloud(*object, *object, randomRotationMatrix().matrix());
 
-  pcl::IterativeClosestPoint<PointNT, PointNT> align;
-  align.setInputSource(object);
-  align.setInputTarget(scene);
-  align.setMaximumIterations(10000);
-   
+pcl::console::print_highlight ("Downsampling...\n");
+  pcl::VoxelGrid<PointNT> grid;
+  const float leaf = 4.0f;
+  grid.setLeafSize (leaf, leaf, leaf);
+  grid.setInputCloud (object);
+  grid.filter (*object);
+  grid.setInputCloud (scene);
+  grid.filter (*scene);
+
+  pcl::copyPointCloud(*object, *object_b);
+  pcl::copyPointCloud(*scene, *scene_b);
+  pcl::transformPointCloudWithNormals(*scene, *scene, mat);
+  pcl::transformPointCloudWithNormals(*object, *object, mat2);
+
+  /*pcl::CropBox<PointNT> cbox;
+  cbox.setMin(Eigen::Vector4f(crop_mat(0, 0), crop_mat(1, 0), crop_mat(2, 0), 1));
+  cbox.setMax(Eigen::Vector4f(crop_mat(0, 1), crop_mat(1, 1), crop_mat(2, 1), 1));
+  cbox.setRotation(Eigen::Vector3f(crop_mat(0, 2), crop_mat(1, 2), crop_mat(2, 2)));
+  cbox.setInputCloud(scene);
+  cbox.filter(*scene);*/
+  
+
+  Eigen::Vector3f centroid(0,0,0);
+  
+  for(const auto& pt : scene->points)
   {
-    pcl::ScopeTime t("Alignment");
-    align.align (*object_aligned);
+    centroid += Eigen::Vector3f(pt.x, pt.y, pt.z);
   }
 
-  if (align.hasConverged ())
-  {
-    // Print results
-    printf ("\n");
-    Eigen::Matrix4f transformation = align.getFinalTransformation ();
-    pcl::console::print_info ("    | %6.3f %6.3f %6.3f | \n", transformation (0,0), transformation (0,1), transformation (0,2));
-    pcl::console::print_info ("R = | %6.3f %6.3f %6.3f | \n", transformation (1,0), transformation (1,1), transformation (1,2));
-    pcl::console::print_info ("    | %6.3f %6.3f %6.3f | \n", transformation (2,0), transformation (2,1), transformation (2,2));
-    pcl::console::print_info ("\n");
-    pcl::console::print_info ("t = < %0.3f, %0.3f, %0.3f >\n", transformation (0,3), transformation (1,3), transformation (2,3));
-    pcl::console::print_info ("\n");
+  centroid /= scene->points.size();
 
-    // Show alignment
-    pcl::visualization::PCLVisualizer visu("Alignment - Super4PCS");
+   /* pcl::search::Search<PointNT>::Ptr tree;
+    if (object->isOrganized ())
+    {
+        tree.reset (new pcl::search::OrganizedNeighbor<PointNT> ());
+    }
+    else
+    {
+        tree.reset (new pcl::search::KdTree<PointNT> (false));
+    }
+
+    // Set the input pointcloud for the search tree
+    tree->setInputCloud (object);
+
+    pcl::NormalEstimationOMP<PointNT, PointNT> ne;
+    ne.setInputCloud (object);
+    ne.setKSearch(6);
+    ne.setSearchMethod (tree);
+    ne.compute(*object);
+
+    tree->setInputCloud(scene);
+    ne.setInputCloud(scene);
+    ne.compute(*scene); */
+  
+    pcl::visualization::PCLVisualizer visu("Alignment - Manual");
     visu.addPointCloud (scene, ColorHandlerT (scene, 0.0, 255.0, 0.0), "scene");
-    visu.addPointCloud (object_aligned, ColorHandlerT (object_aligned, 0.0, 0.0, 255.0), "object_aligned");
-    visu.addPointCloud (object_backup, ColorHandlerT (object, 255.0, 0.0, 0.0), "object");
-    visu.addText(std::to_string(align.getFitnessScore()), 0,30);
+    visu.addPointCloud (object, ColorHandlerT (object, 255.0, 0.0, 0.0), "object");
+    //visu.addPointCloud (scene_b, ColorHandlerT(scene_b, 0.0, 0.0, 255.0), "ob");
     visu.addText(std::to_string(getpid()), 0, 50, "pidtext");
-
-    std::string output = "output." + std::to_string(getpid()) + ".pcd";
-
-    pcl::console::print_highlight ("Saving registered cloud to %s ...\n", output.c_str());
-    pcl::io::savePCDFile<PointNT>(output, *object_aligned);
+    visu.addOrientationMarkerWidgetAxes(visu.getRenderWindow()->GetInteractor());
+    visu.addSphere(pcl::PointXYZ(centroid.x(), centroid.y(), centroid.z()), 20, "sph");
+    visu.addSphere(pcl::PointXYZ(0, 0, 0), 20, "sph0");
 
     visu.spin ();
-  }
-  else
-  {
-    pcl::console::print_error ("Alignment failed!\n");
-    return (-1);
-  }
+
 
   return (0);
 }
